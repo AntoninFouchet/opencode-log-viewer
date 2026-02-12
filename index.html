@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenCode Log Viewer</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+</head>
+<body>
+    <div class="app">
+        <!-- Sidebar: Liste des sessions -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h2>📊 Sessions OpenCode</h2>
+                <div class="header-actions">
+                    <button id="settings-btn" class="btn-icon" title="Paramètres">⚙️</button>
+                    <button id="refresh-btn" class="btn-icon" title="Rafraîchir">🔄</button>
+                </div>
+            </div>
+
+            <div class="filters">
+                <input type="text" id="search" placeholder="🔍 Rechercher...">
+                <select id="status-filter">
+                    <option value="">Tous les statuts</option>
+                    <option value="idle">Idle</option>
+                    <option value="running">Running</option>
+                    <option value="error">Error</option>
+                </select>
+            </div>
+
+            <div id="sessions-list" class="sessions-list">
+                <div class="loading">Chargement des sessions...</div>
+            </div>
+        </aside>
+
+        <!-- Main: Timeline de la session -->
+        <main class="main">
+            <header class="session-header">
+                <div class="session-header-content">
+                    <h1 id="session-title">Sélectionnez une session</h1>
+                    <div class="session-meta">
+                        <span id="session-status" class="status"></span>
+                        <span id="session-date"></span>
+                    </div>
+                </div>
+            </header>
+
+            <div id="timeline" class="timeline">
+                <div class="empty-state">
+                    <div class="empty-icon">📋</div>
+                    <h3>Aucune session sélectionnée</h3>
+                    <p>Sélectionnez une session dans la liste de gauche pour voir son historique</p>
+                </div>
+            </div>
+        </main>
+
+        <!-- Panel: Détails et stats -->
+        <aside class="details-panel">
+            <div class="tabs">
+                <button class="tab active" data-tab="stats">📈 Stats</button>
+                <button class="tab" data-tab="metadata">ℹ️ Métadonnées</button>
+                <button class="tab" data-tab="tools">🔧 Outils</button>
+            </div>
+
+            <div id="stats-tab" class="tab-content active">
+                <h3>Statistiques</h3>
+                <div id="stats-content">
+                    <div class="empty-stats">Sélectionnez une session</div>
+                </div>
+            </div>
+
+            <div id="metadata-tab" class="tab-content">
+                <h3>Métadonnées</h3>
+                <div id="metadata-content">
+                    <div class="empty-stats">Sélectionnez une session</div>
+                </div>
+            </div>
+
+            <div id="tools-tab" class="tab-content">
+                <h3>Outils utilisés</h3>
+                <div id="tools-content">
+                    <div class="empty-stats">Sélectionnez une session</div>
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <!-- Connection Status -->
+    <div id="connection-status" class="connection-status">
+        <span class="status-indicator"></span>
+        <span class="status-text">Connexion...</span>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>⚙️ Paramètres</h2>
+                <button id="close-modal" class="btn-close">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="server-url">URL du serveur OpenCode</label>
+                    <input type="text" id="server-url" placeholder="http://localhost:3000" />
+                    <small>Exemple: http://localhost:3000 ou https://opencode.example.com</small>
+                </div>
+                <div class="form-group">
+                    <label for="refresh-interval">Intervalle de rafraîchissement (secondes)</label>
+                    <input type="number" id="refresh-interval" min="5" max="300" value="30" />
+                    <small>Entre 5 et 300 secondes</small>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="save-settings" class="btn-primary">💾 Enregistrer</button>
+                <button id="cancel-settings" class="btn-secondary">Annuler</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/11.1.1/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-javascript.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-json.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-bash.min.js"></script>
+    <script type="module" src="js/main.js"></script>
+</body>
+</html>
