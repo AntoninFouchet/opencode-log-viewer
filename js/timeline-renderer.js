@@ -47,16 +47,17 @@ export class TimelineRenderer {
      */
     renderMessage(msg) {
         const div = document.createElement('div');
-        div.className = `message message-${msg.role || 'unknown'}`;
-        div.dataset.messageId = msg.id;
+        const role = msg.info?.role || msg.role;
+        div.className = `message message-${role || 'unknown'}`;
+        div.dataset.messageId = msg.info?.id || msg.id;
 
         div.innerHTML = `
             <div class="message-header">
-                <span class="role">${this.getRoleIcon(msg.role)} ${this.getRoleName(msg.role)}</span>
-                <span class="time">${this.formatTime(msg.time?.created)}</span>
+                <span class="role">${this.getRoleIcon(role)} ${this.getRoleName(role)}</span>
+                <span class="time">${this.formatTime(msg.info?.time?.created || msg.time?.created)}</span>
             </div>
             <div class="message-parts">
-                ${this.renderParts(msg.parts || [])}
+                ${this.renderParts(msg.info?.parts || msg.parts || [])}
             </div>
         `;
 
@@ -121,6 +122,7 @@ export class TimelineRenderer {
 
         return `
             <div class="part part-text">
+                ${this.renderTimestamp(part.time)}
                 ${html}
             </div>
         `;
@@ -130,20 +132,40 @@ export class TimelineRenderer {
      * Rend une part d'outil
      */
     renderToolPart(part) {
-        const tool = part.tool || {};
-        const name = tool.name || 'unknown';
-        const args = tool.args || {};
-        const result = tool.result;
+        // Le nom peut être une string directe ou dans un objet
+        let name = part.tool;
+        if (typeof name !== 'string') {
+            const tool = part.tool || part.call || part.function || {};
+            name = tool.name || tool.function?.name || tool.id || part.name || 'unknown';
+        }
+        
+        // Arguments depuis state.input ou tool.args
+        let args = {};
+        if (part.state?.input) {
+            args = part.state.input;
+        } else if (part.tool?.args) {
+            args = part.tool.args;
+        } else if (part.call?.args) {
+            args = part.call.args;
+        }
+        
+        // Résultat depuis state.output
+        const result = part.state?.output;
+        const state = part.state || {};
 
         return `
             <div class="part part-tool">
+                ${this.renderTimestamp(part.time)}
                 <div class="tool-header">
-                    🔧 <strong>${this.escapeHtml(name)}</strong>
+                    🔧 <strong>${this.escapeHtml(String(name))}</strong>
+                    ${state.status ? `<span class="tool-status">(${state.status})</span>` : ''}
                 </div>
+                ${Object.keys(args).length > 0 ? `
                 <div class="tool-args">
                     <strong>Arguments:</strong>
                     <pre><code class="language-json">${this.escapeHtml(JSON.stringify(args, null, 2))}</code></pre>
                 </div>
+                ` : ''}
                 ${result ? `
                     <div class="tool-result">
                         <strong>Résultat:</strong>
@@ -162,6 +184,7 @@ export class TimelineRenderer {
 
         return `
             <div class="part part-reasoning">
+                ${this.renderTimestamp(part.time)}
                 <div class="reasoning-header">💭 Raisonnement</div>
                 <div class="reasoning-content">${this.escapeHtml(text)}</div>
             </div>
@@ -178,6 +201,7 @@ export class TimelineRenderer {
 
         return `
             <div class="part part-file">
+                ${this.renderTimestamp(part.time)}
                 <div>📄 <strong>${this.escapeHtml(path)}</strong></div>
                 ${text ? `
                     <pre><code>${this.escapeHtml(text)}</code></pre>
@@ -192,6 +216,7 @@ export class TimelineRenderer {
     renderSnapshotPart(part) {
         return `
             <div class="part part-snapshot">
+                ${this.renderTimestamp(part.time)}
                 📸 <strong>Snapshot:</strong> ${this.escapeHtml(part.snapshot || '')}
             </div>
         `;
@@ -205,6 +230,7 @@ export class TimelineRenderer {
 
         return `
             <div class="part part-patch">
+                ${this.renderTimestamp(part.time)}
                 <div>🔄 <strong>Patch appliqué</strong></div>
                 <div>Hash: <code>${this.escapeHtml(part.hash || '')}</code></div>
                 ${files.length > 0 ? `
@@ -220,6 +246,7 @@ export class TimelineRenderer {
     renderAgentPart(part) {
         return `
             <div class="part part-agent">
+                ${this.renderTimestamp(part.time)}
                 🤖 <strong>Agent:</strong> ${this.escapeHtml(part.name || 'unknown')}
             </div>
         `;
@@ -231,6 +258,7 @@ export class TimelineRenderer {
     renderStepStartPart(part) {
         return `
             <div class="part part-step">
+                ${this.renderTimestamp(part.time)}
                 ▶️ <strong>Début d'étape:</strong> ${this.escapeHtml(part.name || '')}
             </div>
         `;
@@ -245,6 +273,7 @@ export class TimelineRenderer {
 
         return `
             <div class="part part-step">
+                ${this.renderTimestamp(part.time)}
                 ${icon} <strong>Fin d'étape</strong>
                 ${part.error ? `<div>Erreur: ${this.escapeHtml(part.error)}</div>` : ''}
             </div>
@@ -257,6 +286,7 @@ export class TimelineRenderer {
     renderUnknownPart(part) {
         return `
             <div class="part part-unknown">
+                ${this.renderTimestamp(part.time)}
                 <em>Type inconnu: ${this.escapeHtml(part.type || 'unknown')}</em>
                 <pre><code class="language-json">${this.escapeHtml(JSON.stringify(part, null, 2))}</code></pre>
             </div>
@@ -311,6 +341,41 @@ export class TimelineRenderer {
             minute: '2-digit',
             second: '2-digit',
         });
+    }
+
+    /**
+     * Rend un timestamp pour une part
+     * Affiche start et end si disponibles, avec durée
+     */
+    renderTimestamp(time) {
+        if (!time) return '';
+
+        const start = time.start ? new Date(time.start) : null;
+        const end = time.end ? new Date(time.end) : null;
+
+        if (!start) return '';
+
+        let html = `<span class="part-timestamp">🕐 ${this.formatTime(start.getTime())}`;
+
+        if (end && start) {
+            const duration = end.getTime() - start.getTime();
+            html += ` → ${this.formatTime(end.getTime())} (${this.formatDuration(duration)})`;
+        }
+
+        html += '</span>';
+
+        return html;
+    }
+
+    /**
+     * Formate une durée en milliseconds
+     */
+    formatDuration(ms) {
+        if (ms < 1000) return `${ms}ms`;
+        if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+        const minutes = Math.floor(ms / 60000);
+        const seconds = Math.floor((ms % 60000) / 1000);
+        return `${minutes}m ${seconds}s`;
     }
 
     /**

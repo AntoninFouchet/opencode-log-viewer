@@ -65,7 +65,7 @@ export class OpencodeClient {
      * Récupère les messages d'une session
      */
     async getSessionMessages(sessionId) {
-        return this.request(`/session/${sessionId}/messages`);
+        return this.request(`/session/${sessionId}/message`);
     }
 
     /**
@@ -81,7 +81,7 @@ export class OpencodeClient {
      * S'abonne aux événements globaux
      */
     subscribeToEvents(callback) {
-        const eventSource = new EventSource(`${this.baseURL}/events`);
+        const eventSource = new EventSource(`${this.baseURL}/event`);
 
         eventSource.onmessage = (event) => {
             try {
@@ -108,7 +108,7 @@ export class OpencodeClient {
             this.eventSource.close();
         }
 
-        this.eventSource = new EventSource(`${this.baseURL}/session/${sessionId}/events`);
+        this.eventSource = new EventSource(`${this.baseURL}/event`);
 
         this.eventSource.onmessage = (event) => {
             try {

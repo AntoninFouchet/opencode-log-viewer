@@ -346,6 +346,20 @@ body {
     color: #888;
 }
 
+.part-timestamp {
+    display: inline-block;
+    font-size: 0.75rem;
+    color: #888;
+    margin-bottom: 0.5rem;
+    font-family: monospace;
+}
+
+.tool-status {
+    font-size: 0.75rem;
+    color: #888;
+    margin-left: 0.5rem;
+}
+
 pre {
     background: #0d0d0d;
     padding: 0.75rem;
