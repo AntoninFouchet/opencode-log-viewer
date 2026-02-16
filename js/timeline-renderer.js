@@ -7,26 +7,74 @@
 export class TimelineRenderer {
     constructor(container) {
         this.container = container;
+        this.renderedMessageIds = new Set();
     }
 
     /**
-     * Affiche une liste de messages
+     * Affiche une liste de messages (affichage instantané)
      */
     render(messages) {
-        if (!messages || messages.length === 0) {
+        if (!messages || !Array.isArray(messages)) {
+            this.renderEmpty();
+            return;
+        }
+
+        const validMessages = messages.filter(msg => {
+            const info = msg.info || msg;
+            const parts = info?.parts || msg.parts || [];
+            return parts.length > 0;
+        });
+        
+        if (validMessages.length === 0) {
             this.renderEmpty();
             return;
         }
 
         this.container.innerHTML = '';
-
-        messages.forEach(msg => {
-            const messageEl = this.renderMessage(msg);
+        this.renderedMessageIds.clear();
+        
+        messages.forEach((msg, index) => {
+            const id = msg.info?.id || msg.id || `msg-${index}`;
+            this.renderedMessageIds.add(id);
+            const messageEl = this.renderMessage(msg, false, index);
             this.container.appendChild(messageEl);
         });
-
-        // Appliquer la coloration syntaxique
+        
         this.highlightCode();
+        this.scrollToBottom();
+    }
+
+    /**
+     * Mise à jour incrémentale - ajoute seulement les nouveaux messages
+     */
+    updateIncremental(messages) {
+        if (!messages || !Array.isArray(messages) || messages.length === 0) return;
+        
+        let newMessageAdded = false;
+        
+        messages.forEach((msg, index) => {
+            const info = msg.info || msg;
+            const parts = info?.parts || msg.parts || [];
+            if (parts.length === 0) return;
+            
+            const id = msg.info?.id || msg.id || `msg-${index}`;
+            
+            if (this.renderedMessageIds.has(id)) return;
+            
+            this.renderedMessageIds.add(id);
+            const messageEl = this.renderMessage(msg, true, index);
+            this.container.appendChild(messageEl);
+            newMessageAdded = true;
+        });
+        
+        if (newMessageAdded) {
+            this.highlightCode();
+            this.scrollToBottom();
+        }
+    }
+
+    scrollToBottom() {
+        this.container.scrollTop = this.container.scrollHeight;
     }
 
     /**
@@ -45,19 +93,25 @@ export class TimelineRenderer {
     /**
      * Rend un message
      */
-    renderMessage(msg) {
+    renderMessage(msg, isNew = false, messageIndex = 0) {
         const div = document.createElement('div');
-        const role = msg.info?.role || msg.role;
-        div.className = `message message-${role || 'unknown'}`;
-        div.dataset.messageId = msg.info?.id || msg.id;
+        const info = msg.info || msg;
+        const role = info?.role || msg.role || 'unknown';
+        div.className = `message message-${role}`;
+        if (isNew) {
+            div.classList.add('message-new');
+        }
+        div.dataset.messageId = info?.id || msg.id || Date.now();
+
+        const parts = info?.parts || msg.parts || [];
 
         div.innerHTML = `
             <div class="message-header">
                 <span class="role">${this.getRoleIcon(role)} ${this.getRoleName(role)}</span>
-                <span class="time">${this.formatTime(msg.info?.time?.created || msg.time?.created)}</span>
+                <span class="time">${this.formatTime(info?.time?.created || msg.time?.created)}</span>
             </div>
             <div class="message-parts">
-                ${this.renderParts(msg.info?.parts || msg.parts || [])}
+                ${this.renderParts(parts, messageIndex)}
             </div>
         `;
 
@@ -67,24 +121,24 @@ export class TimelineRenderer {
     /**
      * Rend toutes les parts d'un message
      */
-    renderParts(parts) {
+    renderParts(parts, messageIndex = 0) {
         if (!parts || parts.length === 0) {
             return '<div class="part part-text"><em>Aucun contenu</em></div>';
         }
 
-        return parts.map(part => this.renderPart(part)).join('');
+        return parts.map((part, partIndex) => this.renderPart(part, messageIndex, partIndex)).join('');
     }
 
     /**
      * Rend une part selon son type
      */
-    renderPart(part) {
+    renderPart(part, messageIndex = 0, partIndex = 0) {
         switch (part.type) {
             case 'text':
                 return this.renderTextPart(part);
 
             case 'tool':
-                return this.renderToolPart(part);
+                return this.renderToolPart(part, messageIndex, partIndex);
 
             case 'reasoning':
                 return this.renderReasoningPart(part);
@@ -96,16 +150,7 @@ export class TimelineRenderer {
                 return this.renderSnapshotPart(part);
 
             case 'patch':
-                return this.renderPatchPart(part);
-
-            case 'agent':
-                return this.renderAgentPart(part);
-
-            case 'step_start':
-                return this.renderStepStartPart(part);
-
-            case 'step_finish':
-                return this.renderStepFinishPart(part);
+                return this.renderPatchPart(part, `${messageIndex}-${partIndex}`);
 
             default:
                 return this.renderUnknownPart(part);
@@ -131,7 +176,7 @@ export class TimelineRenderer {
     /**
      * Rend une part d'outil
      */
-    renderToolPart(part) {
+    renderToolPart(part, messageIndex = 0, partIndex = 0) {
         // Le nom peut être une string directe ou dans un objet
         let name = part.tool;
         if (typeof name !== 'string') {
@@ -153,12 +198,22 @@ export class TimelineRenderer {
         const result = part.state?.output;
         const state = part.state || {};
 
+        // Check if this is an edit tool with oldString/newString
+        const isEditTool = name === 'edit' || name === 'write';
+        const hasDiff = isEditTool && (args.oldString !== undefined || args.newString !== undefined);
+        const diffToggle = hasDiff ? `
+            <button class="diff-toggle-btn" data-msg-index="${messageIndex}" data-part-index="${partIndex}" title="Afficher/Masquer les modifications">
+                <span class="diff-toggle-icon">▶</span>
+            </button>
+        ` : '';
+
         return `
-            <div class="part part-tool">
+            <div class="part part-tool" data-msg-index="${messageIndex}" data-part-index="${partIndex}">
                 ${this.renderTimestamp(part.time)}
                 <div class="tool-header">
                     🔧 <strong>${this.escapeHtml(String(name))}</strong>
                     ${state.status ? `<span class="tool-status">(${state.status})</span>` : ''}
+                    ${diffToggle}
                 </div>
                 ${Object.keys(args).length > 0 ? `
                 <div class="tool-args">
@@ -225,16 +280,20 @@ export class TimelineRenderer {
     /**
      * Rend une part de patch
      */
-    renderPatchPart(part) {
+    renderPatchPart(part, index) {
         const files = part.files || [];
+        const patchId = `patch-${index}`;
 
         return `
-            <div class="part part-patch">
+            <div class="part part-patch" data-patch-id="${patchId}">
                 ${this.renderTimestamp(part.time)}
                 <div>🔄 <strong>Patch appliqué</strong></div>
                 <div>Hash: <code>${this.escapeHtml(part.hash || '')}</code></div>
                 ${files.length > 0 ? `
-                    <div>Fichiers modifiés: ${files.map(f => `<code>${this.escapeHtml(f)}</code>`).join(', ')}</div>
+                    <div class="patch-files">
+                        <strong>Fichiers modifiés:</strong>
+                        ${files.map(f => `<code class="patch-file-link" data-patch-id="${patchId}" data-file="${this.escapeHtml(f)}">${this.escapeHtml(f)}</code>`).join(', ')}
+                    </div>
                 ` : ''}
             </div>
         `;

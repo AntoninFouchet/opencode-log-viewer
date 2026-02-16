@@ -19,12 +19,13 @@ let currentSessionId = null;
 let unsubscribe = null;
 let refreshTimer = null;
 let allSessions = [];
-let allSessionStatuses = {};
 
 // ========== Initialisation ==========
 
 async function init() {
   console.log("🚀 Initialisation de OpenCode Log Viewer");
+
+  setupEventListeners();
 
   // Vérifier la connexion
   updateConnectionStatus("connecting");
@@ -33,6 +34,8 @@ async function init() {
   if (isConnected) {
     updateConnectionStatus("connected");
     console.log("✅ Connecté au serveur OpenCode");
+    await loadSessions();
+    startAutoRefresh();
   } else {
     updateConnectionStatus("error");
     console.error("❌ Impossible de se connecter au serveur OpenCode");
@@ -40,17 +43,7 @@ async function init() {
       "Impossible de se connecter au serveur OpenCode. Vérifiez que le serveur est démarré sur " +
         API_URL,
     );
-    return;
   }
-
-  // Charger les sessions
-  await loadSessions();
-
-  // Configurer les event listeners
-  setupEventListeners();
-
-  // Démarrer le rafraîchissement automatique
-  startAutoRefresh();
 }
 
 // ========== Gestion des sessions ==========
@@ -60,7 +53,6 @@ async function loadSessions() {
     console.log("📥 Chargement des sessions...");
     const sessions = await client.getSessions();
 
-    // On affiche toujours "idle" pour toutes les sessions
     allSessions = sessions.map((session) => ({
       ...session,
       status: "idle",
@@ -70,6 +62,8 @@ async function loadSessions() {
     renderSessionsList(allSessions);
   } catch (error) {
     console.error("❌ Erreur chargement sessions:", error);
+    allSessions = [];
+    renderSessionsList([]);
     showError("Erreur lors du chargement des sessions");
   }
 }
@@ -134,12 +128,12 @@ async function loadSession(sessionId) {
   try {
     console.log(`📖 Chargement de la session ${sessionId}...`);
 
-    // Récupérer les données de la session depuis la liste déjà chargée
-    const session = allSessions.find((s) => s.id === sessionId);
+    // Charger les détails complets de la session (contient les tokens)
+    const session = await client.getSession(sessionId);
     console.log("Session trouvée:", session);
 
     if (!session) {
-      throw new Error("Session non trouvée dans la liste");
+      throw new Error("Session non trouvée");
     }
 
     // Charger les messages
@@ -186,42 +180,41 @@ function displaySession(session, messages) {
 
   // Outils
   renderTools(messages);
+
+  // Modifications
+  renderModifications(messages);
 }
 
 // ========== Gestion des événements ==========
 
+let reloadTimeout = null;
+
 function handleSessionEvent(event) {
-  console.log("📡 Event reçu:", event.type);
-
-  switch (event.type) {
-    case "message.updated":
-    case "message.part.updated":
-    case "message.part.removed":
-      // Recharger les messages
-      if (currentSessionId) {
-        reloadCurrentSession();
-      }
-      break;
-
-    case "session.status":
-      // On ignore les événements de statut, on affiche toujours "idle"
-      break;
-
-    case "session.updated":
-      // Recharger la session
-      if (currentSessionId) {
-        reloadCurrentSession();
-      }
-      break;
+  if (event.type === 'session.updated' && currentSessionId) {
+    scheduleReload();
   }
+}
+
+function scheduleReload() {
+  if (reloadTimeout) return;
+  
+  // Wait 2 seconds before reloading to batch multiple events
+  reloadTimeout = setTimeout(() => {
+    reloadTimeout = null;
+    reloadCurrentSession();
+  }, 2000);
 }
 
 async function reloadCurrentSession() {
   if (!currentSessionId) return;
 
   try {
+    const session = await client.getSession(currentSessionId);
     const messages = await client.getSessionMessages(currentSessionId);
-    timeline.render(messages);
+    timeline.updateIncremental(messages);
+    if (session) {
+      renderStats(session, messages);
+    }
   } catch (error) {
     console.error("Erreur rechargement messages:", error);
   }
@@ -231,8 +224,6 @@ async function reloadCurrentSession() {
 
 function renderStats(session, messages) {
   const statsContent = document.getElementById("stats-content");
-
-  console.log("renderStats called with:", { sessionId: session?.id, messageCount: messages?.length });
 
   const totalMessages = messages.length;
   const userMessages = messages.filter((m) => m.info?.role === "user").length;
@@ -248,18 +239,30 @@ function renderStats(session, messages) {
     });
   });
 
-  // Compter les tokens (depuis info.tokens ou tokens)
+  // Compter les tokens (depuis la session ou le dernier message)
   let totalTokens = 0;
   let inputTokens = 0;
   let outputTokens = 0;
-  messages.forEach((msg) => {
-    const tokens = msg.info?.tokens || msg.tokens;
-    if (tokens) {
-      totalTokens += tokens.total || 0;
-      inputTokens += tokens.input || 0;
-      outputTokens += tokens.output || 0;
+  
+  // D'abord essayer depuis la session
+  if (session.tokens) {
+    totalTokens = session.tokens.total || 0;
+    inputTokens = session.tokens.input || 0;
+    outputTokens = session.tokens.output || 0;
+  } else {
+    // Sinon utiliser le dernier message (total cumulé)
+    const lastMessageWithTokens = [...messages].reverse().find((msg) => {
+      const tokens = msg.info?.tokens || msg.tokens;
+      return tokens && (tokens.total || tokens.input || tokens.output);
+    });
+    
+    if (lastMessageWithTokens) {
+      const tokens = lastMessageWithTokens.info?.tokens || lastMessageWithTokens.tokens;
+      totalTokens = tokens.total || 0;
+      inputTokens = tokens.input || 0;
+      outputTokens = tokens.output || 0;
     }
-  });
+  }
 
   statsContent.innerHTML = `
         <div class="stat">
@@ -390,9 +393,45 @@ function renderTools(messages) {
 // ========== Event Listeners ==========
 
 function setupEventListeners() {
-  // Bouton refresh
+  // Bouton refresh - hard refresh comme Ctrl+Shift+R
   document.getElementById("refresh-btn").addEventListener("click", () => {
-    loadSessions();
+    window.location.reload();
+  });
+
+  // Event delegation for patch file links in timeline
+  document.getElementById("timeline").addEventListener("click", (e) => {
+    // Handle diff toggle button
+    const toggleBtn = e.target.closest(".diff-toggle-btn");
+    if (toggleBtn) {
+      e.preventDefault();
+      const msgIndex = parseInt(toggleBtn.dataset.msgIndex);
+      const partIndex = parseInt(toggleBtn.dataset.partIndex);
+      if (isNaN(msgIndex)) return;
+      toggleDiffInTimeline(msgIndex, isNaN(partIndex) ? 0 : partIndex, toggleBtn);
+      return;
+    }
+
+    if (e.target.classList.contains("file-link") || e.target.closest(".file-link")) {
+      e.preventDefault();
+      const link = e.target.classList.contains("file-link") ? e.target : e.target.closest(".file-link");
+      const patchId = link.dataset.patchId;
+      const file = link.dataset.file;
+      
+      // Find the patch by file path (simpler approach)
+      const patchIndex = currentPatches.findIndex((p) => p.file === file);
+      
+      if (patchIndex >= 0) {
+        // Expand the mod item in the mods tab
+        const modsTab = document.getElementById('mods-tab');
+        const modItem = modsTab.querySelector(`[data-patch-index="${patchIndex}"]`);
+        if (modItem) {
+          const diffEl = modItem.querySelector('.mod-diff');
+          const expandIcon = modItem.querySelector('.mod-expand');
+          diffEl.classList.remove('hidden');
+          expandIcon.classList.add('expanded');
+        }
+      }
+    }
   });
 
   // Bouton settings
@@ -452,7 +491,6 @@ function filterSessions(searchTerm = "") {
 }
 
 function switchTab(tabName) {
-  // Désactiver tous les tabs
   document.querySelectorAll(".tab").forEach((tab) => {
     tab.classList.remove("active");
   });
@@ -460,9 +498,277 @@ function switchTab(tabName) {
     content.classList.remove("active");
   });
 
-  // Activer le tab sélectionné
   document.querySelector(`[data-tab="${tabName}"]`).classList.add("active");
   document.getElementById(`${tabName}-tab`).classList.add("active");
+}
+
+// ========== Modifications & Diff ==========
+
+let currentPatches = [];
+
+function renderModifications(messages) {
+  const modsContent = document.getElementById("mods-content");
+  currentPatches = [];
+
+  const allDiffs = extractDiffsFromMessages(messages);
+  
+  if (allDiffs && allDiffs.length > 0) {
+    allDiffs.forEach((diff) => {
+      currentPatches.push({
+        msgIndex: diff.msgIndex,
+        partId: diff.partId,
+        msgTime: diff.msgTime,
+        file: diff.file,
+        toolName: 'edit',
+        before: diff.before,
+        after: diff.after,
+        additions: diff.additions,
+        deletions: diff.deletions,
+      });
+    });
+  }
+  
+  renderModificationsList(modsContent);
+}
+
+function extractDiffsFromMessages(messages) {
+  const diffs = [];
+  
+  if (!messages || !Array.isArray(messages)) {
+    return diffs;
+  }
+  
+  messages.forEach((msg, msgIndex) => {
+    const parts = msg.parts || msg.info?.parts || [];
+    const msgId = msg.info?.id || msg.id || '';
+    const msgTime = msg.info?.time?.created || msg.time?.created || null;
+    
+    parts.forEach((part, partIndex) => {
+      const partId = part.id || `part-${msgIndex}-${partIndex}`;
+      
+      if (part.type === 'tool') {
+        const state = part.state || {};
+        const input = state.input || {};
+        
+        // Check for filediff in tool result
+        const metadata = state.metadata || {};
+        const filediff = metadata.filediff;
+        
+        if (filediff) {
+          diffs.push({
+            msgIndex: msgIndex,
+            partId: partId,
+            msgTime: msgTime,
+            file: filediff.file || state?.input?.filePath || 'unknown',
+            before: filediff.before || '',
+            after: filediff.after || '',
+            additions: filediff.additions || 0,
+            deletions: filediff.deletions || 0,
+          });
+        }
+        
+        // Also check for oldString/newString in input (for edit tools)
+        if (input.oldString !== undefined || input.newString !== undefined) {
+          const oldStr = input.oldString || '';
+          const newStr = input.newString || '';
+          
+          if (oldStr || newStr) {
+            const filePath = input.filePath || 'unknown';
+            const exists = diffs.some(d => d.file === filePath);
+            
+            if (!exists) {
+              const additions = newStr.split('\n').length - oldStr.split('\n').length;
+              const deletions = additions < 0 ? -additions : 0;
+              const posAdditions = additions > 0 ? additions : 0;
+              
+              diffs.push({
+                msgIndex: msgIndex,
+                partId: partId,
+                msgTime: msgTime,
+                file: filePath,
+                before: oldStr,
+                after: newStr,
+                additions: posAdditions,
+                deletions: deletions,
+              });
+            }
+          }
+        }
+      }
+    });
+  });
+  
+  return diffs;
+}
+
+function renderModificationsList(modsContent) {
+  if (currentPatches.length === 0) {
+    modsContent.innerHTML = '<div class="empty-stats">Aucune modification détectée</div>';
+    return;
+  }
+
+  modsContent.innerHTML = currentPatches
+    .map(
+      (patch, index) => {
+        const fileName = patch.file.split('/').pop();
+        const timeStr = patch.msgTime ? formatDateTime(patch.msgTime) : '';
+        
+        return `
+        <div class="mod-item" data-patch-index="${index}">
+          <div class="mod-main">
+            <div class="mod-file">${escapeHtml(fileName)}</div>
+            <div class="mod-time">${timeStr}</div>
+          </div>
+          <div class="mod-path">${escapeHtml(patch.file)}</div>
+        </div>
+      `}
+    )
+    .join("");
+
+  modsContent.querySelectorAll(".mod-item").forEach((item) => {
+    item.addEventListener("click", (e) => {
+      const index = parseInt(item.dataset.patchIndex);
+      const patch = currentPatches[index];
+      
+      // Scroll to the message in timeline and show diff there
+      if (patch && patch.msgIndex !== undefined) {
+        scrollToMessage(patch.msgIndex, patch);
+      }
+    });
+  });
+}
+
+function scrollToMessage(msgIndex, patch) {
+  const timeline = document.getElementById('timeline');
+  const messages = timeline.querySelectorAll('.message');
+  
+  if (messages[msgIndex]) {
+    // Scroll to the message
+    messages[msgIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
+    
+    // Highlight the message temporarily
+    messages[msgIndex].classList.add('highlighted');
+    setTimeout(() => {
+      messages[msgIndex].classList.remove('highlighted');
+    }, 2000);
+    
+    // Check if this message has an edit tool part and add diff display
+    addDiffToMessage(messages[msgIndex], patch);
+  }
+}
+
+function toggleDiffInTimeline(msgIndex, partIndex, toggleBtn) {
+  const timeline = document.getElementById('timeline');
+  const messages = timeline.querySelectorAll('.message');
+  const messageEl = messages[msgIndex];
+  
+  if (!messageEl) return;
+  
+  // Check if diff already displayed in this message
+  const existingDiff = messageEl.querySelector('.timeline-diff-inline');
+  if (existingDiff) {
+    // Toggle visibility
+    existingDiff.classList.toggle('hidden');
+    toggleBtn.classList.toggle('expanded');
+    return;
+  }
+  
+  // Find the patch that corresponds to this message
+  const patch = currentPatches.find(p => p.msgIndex === msgIndex);
+  if (!patch) return;
+  
+  addDiffToMessage(messageEl, patch, partIndex, toggleBtn);
+}
+
+function addDiffToMessage(messageEl, patch, partIndex = -1, toggleBtn = null) {
+  const diffHtml = renderInlineDiff(patch);
+  const diffContainer = document.createElement('div');
+  diffContainer.className = 'timeline-diff-inline';
+  diffContainer.innerHTML = `
+    <div class="timeline-diff-header">
+      <span class="timeline-diff-file">${escapeHtml(patch.file)}</span>
+      <span class="timeline-diff-stats">
+        <span class="diff-add">+${patch.additions || 0}</span>
+        <span class="diff-del">-${patch.deletions || 0}</span>
+      </span>
+    </div>
+    ${diffHtml}
+  `;
+  
+  // Find the tool part and append diff after it
+  const toolParts = messageEl.querySelectorAll('.part-tool');
+  const toolPart = partIndex >= 0 ? toolParts[partIndex] : toolParts[toolParts.length - 1];
+  
+  if (toolPart) {
+    toolPart.after(diffContainer);
+    if (toggleBtn) {
+      toggleBtn.classList.add('expanded');
+    }
+  }
+}
+
+function renderInlineDiff(patch) {
+  const before = patch.before || '';
+  const after = patch.after || '';
+  
+  if (!before && !after) {
+    return '<div class="empty-stats">Contenu non disponible</div>';
+  }
+  
+  const beforeLines = before.split('\n');
+  const afterLines = after.split('\n');
+  const diff = computeLineDiff(beforeLines, afterLines);
+  
+  let html = '<div class="inline-diff">';
+  
+  diff.forEach((item) => {
+    if (item.type === 'equal') {
+      html += `<div class="diff-line diff-equal"><span class="line-num">${item.oldLineNum || ''}</span><span class="line-content">${escapeHtml(item.line)}</span></div>`;
+    } else if (item.type === 'deleted') {
+      html += `<div class="diff-line diff-deleted"><span class="line-num">${item.oldLineNum || ''}</span><span class="line-content">- ${escapeHtml(item.line)}</span></div>`;
+    } else if (item.type === 'added') {
+      html += `<div class="diff-line diff-added"><span class="line-num">${item.newLineNum || ''}</span><span class="line-content">+ ${escapeHtml(item.line)}</span></div>`;
+    }
+  });
+  
+  html += '</div>';
+  return html;
+}
+
+function computeLineDiff(beforeLines, afterLines) {
+  const result = [];
+  const m = beforeLines.length;
+  const n = afterLines.length;
+  
+  const dp = Array(m + 1).fill(null).map(() => Array(n + 1).fill(0));
+  
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      if (beforeLines[i - 1] === afterLines[j - 1]) {
+        dp[i][j] = dp[i - 1][j - 1] + 1;
+      } else {
+        dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+      }
+    }
+  }
+  
+  let i = m, j = n;
+  const lcs = [];
+  
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && beforeLines[i - 1] === afterLines[j - 1]) {
+      lcs.push({ type: 'equal', line: beforeLines[i - 1], oldLineNum: i, newLineNum: j });
+      i--; j--;
+    } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
+      lcs.push({ type: 'added', line: afterLines[j - 1], newLineNum: j });
+      j--;
+    } else if (i > 0) {
+      lcs.push({ type: 'deleted', line: beforeLines[i - 1], oldLineNum: i });
+      i--;
+    }
+  }
+  
+  return lcs.reverse();
 }
 
 // ========== Settings Modal ==========
@@ -511,24 +817,19 @@ function saveSettings() {
   API_URL = newURL;
   REFRESH_INTERVAL = newInterval;
 
-  // Recréer le client si l'URL a changé
-  if (urlChanged) {
-    console.log(`🔄 Changement d'URL: ${API_URL}`);
-
-    // Fermer l'ancienne connexion SSE
-    if (unsubscribe) {
-      unsubscribe();
-      unsubscribe = null;
-    }
-    client.closeEventSource();
-
-    // Créer un nouveau client
-    client = new OpencodeClient(API_URL);
-
-    // Recharger
-    currentSessionId = null;
-    init();
+  // Fermer l'ancienne connexion SSE
+  if (unsubscribe) {
+    unsubscribe();
+    unsubscribe = null;
   }
+  client.closeEventSource();
+
+  // Créer un nouveau client
+  client = new OpencodeClient(API_URL);
+
+  // Recharger (toujours, pour tester la nouvelle connexion)
+  currentSessionId = null;
+  init();
 
   // Redémarrer l'auto-refresh avec le nouvel intervalle
   startAutoRefresh();
@@ -547,9 +848,12 @@ function startAutoRefresh() {
     clearInterval(refreshTimer);
   }
 
+  // Only refresh session list if no session is selected
   refreshTimer = setInterval(() => {
-    console.log("🔄 Rafraîchissement automatique...");
-    loadSessions();
+    if (!currentSessionId) {
+      console.log("🔄 Rafraîchissement automatique...");
+      loadSessions();
+    }
   }, REFRESH_INTERVAL);
 }
 
