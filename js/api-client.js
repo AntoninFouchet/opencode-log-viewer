@@ -75,6 +75,48 @@ export class OpencodeClient {
         return this.request('/session/status');
     }
 
+    /**
+     * Lit le contenu d'un fichier
+     */
+    async getFileContent(filePath) {
+        try {
+            const encodedPath = encodeURIComponent(filePath);
+            const url = `${this.baseURL}/file/content?path=${encodedPath}`;
+            
+            const response = await fetch(url, {
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            const text = await response.text();
+            return JSON.parse(text);
+        } catch (error) {
+            console.error("Error reading file:", error);
+            return null;
+        }
+    }
+
+    /**
+     * Récupère les diffs d'une session
+     */
+    async getSessionDiff(sessionId, messageId) {
+        try {
+            let endpoint = `/session/${sessionId}/diff`;
+            if (messageId) {
+                endpoint += `?messageID=${messageId}`;
+            }
+            return await this.request(endpoint);
+        } catch (error) {
+            console.error("Error getting diff:", error);
+            return [];
+        }
+    }
+
     // ========== Events (Server-Sent Events) ==========
 
     /**
