@@ -83,7 +83,11 @@ export class TimelineRenderer {
     renderEmpty() {
         this.container.innerHTML = `
             <div class="empty-state">
-                <div class="empty-icon">💬</div>
+                <div class="empty-icon">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                    </svg>
+                </div>
                 <h3>Aucun message</h3>
                 <p>Cette session ne contient pas encore de messages</p>
             </div>
@@ -203,7 +207,11 @@ export class TimelineRenderer {
         const hasDiff = isEditTool && (args.oldString !== undefined || args.newString !== undefined);
         const diffToggle = hasDiff ? `
             <button class="diff-toggle-btn" data-msg-index="${messageIndex}" data-part-index="${partIndex}" title="Afficher/Masquer les modifications">
-                <span class="diff-toggle-icon">▶</span>
+                <span class="diff-toggle-icon">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="9 18 15 12 9 6"></polyline>
+                    </svg>
+                </span>
             </button>
         ` : '';
 
@@ -211,7 +219,10 @@ export class TimelineRenderer {
             <div class="part part-tool" data-msg-index="${messageIndex}" data-part-index="${partIndex}">
                 ${this.renderTimestamp(part.time)}
                 <div class="tool-header">
-                    🔧 <strong>${this.escapeHtml(String(name))}</strong>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px">
+                        <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>
+                    </svg>
+                    <strong>${this.escapeHtml(String(name))}</strong>
                     ${state.status ? `<span class="tool-status">(${state.status})</span>` : ''}
                     ${diffToggle}
                 </div>
@@ -240,7 +251,7 @@ export class TimelineRenderer {
         return `
             <div class="part part-reasoning">
                 ${this.renderTimestamp(part.time)}
-                <div class="reasoning-header">💭 Raisonnement</div>
+                <div class="reasoning-header">Raisonnement</div>
                 <div class="reasoning-content">${this.escapeHtml(text)}</div>
             </div>
         `;
@@ -257,7 +268,13 @@ export class TimelineRenderer {
         return `
             <div class="part part-file">
                 ${this.renderTimestamp(part.time)}
-                <div>📄 <strong>${this.escapeHtml(path)}</strong></div>
+                <div>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                    </svg>
+                    <strong>${this.escapeHtml(path)}</strong>
+                </div>
                 ${text ? `
                     <pre><code>${this.escapeHtml(text)}</code></pre>
                 ` : ''}
@@ -287,11 +304,11 @@ export class TimelineRenderer {
         return `
             <div class="part part-patch" data-patch-id="${patchId}">
                 ${this.renderTimestamp(part.time)}
-                <div>🔄 <strong>Patch appliqué</strong></div>
+                <div><strong>Patch applique</strong></div>
                 <div>Hash: <code>${this.escapeHtml(part.hash || '')}</code></div>
                 ${files.length > 0 ? `
                     <div class="patch-files">
-                        <strong>Fichiers modifiés:</strong>
+                        <strong>Fichiers modifies:</strong>
                         ${files.map(f => `<code class="patch-file-link" data-patch-id="${patchId}" data-file="${this.escapeHtml(f)}">${this.escapeHtml(f)}</code>`).join(', ')}
                     </div>
                 ` : ''}
@@ -306,7 +323,7 @@ export class TimelineRenderer {
         return `
             <div class="part part-agent">
                 ${this.renderTimestamp(part.time)}
-                🤖 <strong>Agent:</strong> ${this.escapeHtml(part.name || 'unknown')}
+                <strong>Agent:</strong> ${this.escapeHtml(part.name || 'unknown')}
             </div>
         `;
     }
@@ -328,7 +345,7 @@ export class TimelineRenderer {
      */
     renderStepFinishPart(part) {
         const status = part.status || 'unknown';
-        const icon = status === 'success' ? '✅' : status === 'error' ? '❌' : '⏹️';
+        const statusText = status === 'success' ? 'Succes' : status === 'error' ? 'Erreur' : 'Arrete';
 
         return `
             <div class="part part-step">
@@ -367,11 +384,11 @@ export class TimelineRenderer {
      */
     getRoleIcon(role) {
         const icons = {
-            user: '👤',
-            assistant: '🤖',
-            system: '⚙️',
+            user: '',
+            assistant: '',
+            system: '',
         };
-        return icons[role] || '❓';
+        return icons[role] || '?';
     }
 
     /**

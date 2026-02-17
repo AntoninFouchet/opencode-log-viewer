@@ -23,7 +23,7 @@ let allSessions = [];
 // ========== Initialisation ==========
 
 async function init() {
-  console.log("🚀 Initialisation de OpenCode Log Viewer");
+  console.log("Initialisation de OpenCode Log Viewer");
 
   setupEventListeners();
 
@@ -33,12 +33,12 @@ async function init() {
 
   if (isConnected) {
     updateConnectionStatus("connected");
-    console.log("✅ Connecté au serveur OpenCode");
+    console.log("Connecté au serveur OpenCode");
     await loadSessions();
     startAutoRefresh();
   } else {
     updateConnectionStatus("error");
-    console.error("❌ Impossible de se connecter au serveur OpenCode");
+    console.error("Impossible de se connecter au serveur OpenCode");
     showError(
       "Impossible de se connecter au serveur OpenCode. Vérifiez que le serveur est démarré sur " +
         API_URL,
@@ -50,7 +50,7 @@ async function init() {
 
 async function loadSessions() {
   try {
-    console.log("📥 Chargement des sessions...");
+    console.log("Chargement des sessions...");
     const sessions = await client.getSessions();
 
     allSessions = sessions.map((session) => ({
@@ -58,10 +58,10 @@ async function loadSessions() {
       status: "idle",
     }));
 
-    console.log(`✅ ${sessions.length} session(s) chargée(s)`);
+    console.log(`${sessions.length} session(s) chargee(s)`);
     renderSessionsList(allSessions);
   } catch (error) {
-    console.error("❌ Erreur chargement sessions:", error);
+    console.error("Erreur chargement sessions:", error);
     allSessions = [];
     renderSessionsList([]);
     showError("Erreur lors du chargement des sessions");
@@ -74,14 +74,13 @@ function renderSessionsList(sessions) {
   if (!sessions || sessions.length === 0) {
     list.innerHTML = `
             <div class="empty-state">
-                <div class="empty-icon">📭</div>
-                <p>Aucune session trouvée</p>
+                <p>Aucune session trouvee</p>
             </div>
         `;
     return;
   }
 
-  // Trier par date (plus récent en premier)
+  // Trier par date (plus recent en premier)
   const sorted = [...sessions].sort((a, b) => {
     const timeA = a.time?.created || 0;
     const timeB = b.time?.created || 0;
@@ -93,7 +92,7 @@ function renderSessionsList(sessions) {
       const isActive = session.id === currentSessionId;
       return `
             <div class="session-item ${isActive ? "active" : ""}" data-id="${session.id}">
-                <div class="session-title">${escapeHtml(session.title || "Sans titre")}</div>
+                <div class="session-title" contenteditable="false" data-session-id="${session.id}">${escapeHtml(session.title || "Sans titre")}</div>
                 <div class="session-meta">
                     <span class="status status-${session.status || "unknown"}">${session.status || "unknown"}</span>
                     <span class="date">${formatDate(session.time?.created)}</span>
@@ -105,9 +104,62 @@ function renderSessionsList(sessions) {
 
   // Event listeners
   list.querySelectorAll(".session-item").forEach((item) => {
-    item.addEventListener("click", () => {
+    item.addEventListener("click", (e) => {
+      // Don't load session if clicking on editable title
+      if (e.target.classList.contains("session-title") && e.target.isContentEditable) return;
+      
       const sessionId = item.dataset.id;
       loadSession(sessionId);
+    });
+  });
+  
+  // Add double-click to rename
+  list.querySelectorAll(".session-title").forEach((title) => {
+    title.addEventListener("dblclick", (e) => {
+      e.stopPropagation();
+      title.contentEditable = true;
+      title.classList.add("editing");
+      title.focus();
+      
+      // Select all text
+      const range = document.createRange();
+      range.selectNodeContents(title);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+    });
+    
+    title.addEventListener("blur", async () => {
+      title.contentEditable = false;
+      title.classList.remove("editing");
+      const sessionId = title.dataset.sessionId;
+      const newTitle = title.textContent.trim();
+      
+      // Update session title in API and memory
+      const session = allSessions.find(s => s.id === sessionId);
+      if (session && newTitle && newTitle !== session.title) {
+        try {
+          await client.updateSession(sessionId, { title: newTitle });
+          session.title = newTitle;
+        } catch (err) {
+          console.error("Erreur lors du renommage:", err);
+          title.textContent = session.title || "Sans titre";
+        }
+      }
+    });
+    
+    title.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        title.blur();
+      }
+      if (e.key === "Escape") {
+        // Restore original title
+        const sessionId = title.dataset.sessionId;
+        const session = allSessions.find(s => s.id === sessionId);
+        title.textContent = session?.title || "Sans titre";
+        title.blur();
+      }
     });
   });
 }
@@ -126,7 +178,7 @@ async function loadSession(sessionId) {
   }
 
   try {
-    console.log(`📖 Chargement de la session ${sessionId}...`);
+    console.log(`Chargement de la session ${sessionId}...`);
 
     // Charger les détails complets de la session (contient les tokens)
     const session = await client.getSession(sessionId);
@@ -141,7 +193,7 @@ async function loadSession(sessionId) {
     const messages = await client.getSessionMessages(sessionId);
     console.log("Messages reçus:", messages);
 
-    console.log(`✅ Session chargée: ${messages.length} message(s)`);
+    console.log(`Session chargee: ${messages.length} message(s)`);
 
     // Afficher dans l'interface
     displaySession(session, messages);
@@ -154,7 +206,7 @@ async function loadSession(sessionId) {
     // Mettre à jour la liste (pour l'état actif)
     renderSessionsList(allSessions);
   } catch (error) {
-    console.error("❌ Erreur chargement session:", error);
+    console.error("Erreur chargement session:", error);
     showError("Erreur lors du chargement de la session: " + error.message);
   }
 }
@@ -837,7 +889,7 @@ function saveSettings() {
   closeSettingsModal();
 
   console.log(
-    `✅ Paramètres sauvegardés: URL=${API_URL}, Intervalle=${REFRESH_INTERVAL}ms`,
+    `Parametres sauvegardes: URL=${API_URL}, Intervalle=${REFRESH_INTERVAL}ms`,
   );
 }
 
@@ -851,7 +903,7 @@ function startAutoRefresh() {
   // Only refresh session list if no session is selected
   refreshTimer = setInterval(() => {
     if (!currentSessionId) {
-      console.log("🔄 Rafraîchissement automatique...");
+      console.log("Rafraichissement automatique...");
       loadSessions();
     }
   }, REFRESH_INTERVAL);
