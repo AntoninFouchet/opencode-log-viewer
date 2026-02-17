@@ -62,6 +62,16 @@ export class OpencodeClient {
     }
 
     /**
+     * Met à jour une session (titre)
+     */
+    async updateSession(sessionId, data) {
+        return this.request(`/session/${sessionId}`, {
+            method: 'PATCH',
+            body: JSON.stringify(data),
+        });
+    }
+
+    /**
      * Récupère les messages d'une session
      */
     async getSessionMessages(sessionId) {

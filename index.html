@@ -12,15 +12,26 @@
         <!-- Sidebar: Liste des sessions -->
         <aside class="sidebar">
             <div class="sidebar-header">
-                <h2>📊 Sessions OpenCode</h2>
+                <h2>Sessions</h2>
                 <div class="header-actions">
-                    <button id="settings-btn" class="btn-icon" title="Paramètres">⚙️</button>
-                    <button id="refresh-btn" class="btn-icon" title="Rafraîchir">🔄</button>
+                    <button id="settings-btn" class="btn-icon" title="Paramètres">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="3"></circle>
+                            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                        </svg>
+                    </button>
+                    <button id="refresh-btn" class="btn-icon" title="Rafraîchir">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M23 4v6h-6"></path>
+                            <path d="M1 20v-6h6"></path>
+                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                        </svg>
+                    </button>
                 </div>
             </div>
 
             <div class="filters">
-                <input type="text" id="search" placeholder="🔍 Rechercher...">
+                <input type="text" id="search" placeholder="Rechercher...">
             </div>
 
             <div id="sessions-list" class="sessions-list">
@@ -42,7 +53,11 @@
 
             <div id="timeline" class="timeline">
                 <div class="empty-state">
-                    <div class="empty-icon">📋</div>
+                    <div class="empty-icon">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                        </svg>
+                    </div>
                     <h3>Aucune session sélectionnée</h3>
                     <p>Sélectionnez une session dans la liste de gauche pour voir son historique</p>
                 </div>
@@ -52,10 +67,10 @@
         <!-- Panel: Détails et stats -->
         <aside class="details-panel">
             <div class="tabs">
-                <button class="tab active" data-tab="stats">📈 Stats</button>
-                <button class="tab" data-tab="metadata">ℹ️ Métadonnées</button>
-                <button class="tab" data-tab="tools">🔧 Outils</button>
-                <button class="tab" data-tab="mods">📝 Modifs</button>
+                <button class="tab active" data-tab="stats">Stats</button>
+                <button class="tab" data-tab="metadata">Infos</button>
+                <button class="tab" data-tab="tools">Outils</button>
+                <button class="tab" data-tab="mods">Modifs</button>
             </div>
 
             <div class="tab-content-wrapper">
@@ -67,7 +82,7 @@
                 </div>
 
                 <div id="metadata-tab" class="tab-content">
-                    <h3>Métadonnées</h3>
+                    <h3>Informations</h3>
                     <div id="metadata-content">
                         <div class="empty-stats">Sélectionnez une session</div>
                     </div>
@@ -100,8 +115,13 @@
     <div id="settings-modal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h2>⚙️ Paramètres</h2>
-                <button id="close-modal" class="btn-close">✕</button>
+                <h2>Paramètres</h2>
+                <button id="close-modal" class="btn-close">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
             </div>
             <div class="modal-body">
                 <div class="form-group">
@@ -116,7 +136,7 @@
                 </div>
             </div>
             <div class="modal-footer">
-                <button id="save-settings" class="btn-primary">💾 Enregistrer</button>
+                <button id="save-settings" class="btn-primary">Enregistrer</button>
                 <button id="cancel-settings" class="btn-secondary">Annuler</button>
             </div>
         </div>
