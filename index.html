@@ -13,7 +13,7 @@
         <aside class="sidebar">
             <div class="sidebar-header">
                 <h2>Sessions</h2>
-                <div class="header-actions">
+            <div class="header-actions">
                     <button id="settings-btn" class="btn-icon" title="Paramètres">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <circle cx="12" cy="12" r="3"></circle>
@@ -43,10 +43,21 @@
         <main class="main">
             <header class="session-header">
                 <div class="session-header-content">
-                    <h1 id="session-title">Sélectionnez une session</h1>
-                    <div class="session-meta">
-                        <span id="session-status" class="status"></span>
+                    <div class="header-left">
+                        <button id="toggle-left-header-btn" class="btn-icon" title="Masquer/Montrer sessions">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="15 18 9 12 15 6"></polyline>
+                            </svg>
+                        </button>
+                        <h1 id="session-title">Selectionnez une session</h1>
+                    </div>
+                    <div class="header-right">
                         <span id="session-date"></span>
+                        <button id="toggle-right-btn" class="btn-icon" title="Masquer/Montrer details">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="9 18 15 12 9 6"></polyline>
+                            </svg>
+                        </button>
                     </div>
                 </div>
             </header>

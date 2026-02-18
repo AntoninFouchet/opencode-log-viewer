@@ -108,11 +108,46 @@ export class TimelineRenderer {
         div.dataset.messageId = info?.id || msg.id || Date.now();
 
         const parts = info?.parts || msg.parts || [];
+        
+        // Calculate total duration for assistant messages
+        const created = info?.time?.created || msg.time?.created;
+        const completed = info?.time?.completed || msg.time?.completed;
+        let durationHtml = '';
+        let statsHtml = '';
+        
+        if (role === 'assistant' && created && completed) {
+            const duration = completed - created;
+            durationHtml = `<span class="message-duration" title="Temps total de traitement">${this.formatDuration(duration)}</span>`;
+        }
+        
+        // Add tokens and cost info
+        const tokens = info?.tokens || msg.tokens;
+        const cost = info?.cost || msg.cost;
+        if (tokens) {
+            const total = tokens.total || (tokens.input + tokens.output + (tokens.reasoning || 0));
+            statsHtml = `<span class="message-stats" title="Tokens: ${tokens.input} in / ${tokens.output} out${tokens.reasoning ? ' / ' + tokens.reasoning + ' reasoning' : ''}">${total} tok</span>`;
+        }
+        
+        // Add model info for assistant messages
+        const modelId = info?.modelID || msg.modelID;
+        const modelHtml = (role === 'assistant' && modelId) 
+            ? `<span class="message-model" title="Model">${this.escapeHtml(modelId)}</span>` 
+            : '';
+        
+        // Add mode info
+        const mode = info?.mode || msg.mode;
+        const modeHtml = (role === 'assistant' && mode) 
+            ? `<span class="message-mode" title="Mode">${this.escapeHtml(mode)}</span>` 
+            : '';
 
         div.innerHTML = `
             <div class="message-header">
                 <span class="role">${this.getRoleIcon(role)} ${this.getRoleName(role)}</span>
-                <span class="time">${this.formatTime(info?.time?.created || msg.time?.created)}</span>
+                <span class="time">${this.formatTime(created)}</span>
+                ${modeHtml}
+                ${modelHtml}
+                ${durationHtml}
+                ${statsHtml}
             </div>
             <div class="message-parts">
                 ${this.renderParts(parts, messageIndex)}
@@ -155,6 +190,12 @@ export class TimelineRenderer {
 
             case 'patch':
                 return this.renderPatchPart(part, `${messageIndex}-${partIndex}`);
+
+            case 'step-start':
+                return this.renderStepStartPart(part);
+
+            case 'step-finish':
+                return this.renderStepFinishPart(part);
 
             default:
                 return this.renderUnknownPart(part);
@@ -289,7 +330,11 @@ export class TimelineRenderer {
         return `
             <div class="part part-snapshot">
                 ${this.renderTimestamp(part.time)}
-                📸 <strong>Snapshot:</strong> ${this.escapeHtml(part.snapshot || '')}
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px">
+                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                    <circle cx="12" cy="13" r="4"></circle>
+                </svg>
+                <strong>Snapshot:</strong> ${this.escapeHtml(part.snapshot || '')}
             </div>
         `;
     }
@@ -335,7 +380,10 @@ export class TimelineRenderer {
         return `
             <div class="part part-step">
                 ${this.renderTimestamp(part.time)}
-                ▶️ <strong>Début d'étape:</strong> ${this.escapeHtml(part.name || '')}
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px">
+                    <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                </svg>
+                <strong>Debut d'etape:</strong> ${this.escapeHtml(part.name || '')}
             </div>
         `;
     }
@@ -345,13 +393,18 @@ export class TimelineRenderer {
      */
     renderStepFinishPart(part) {
         const status = part.status || 'unknown';
-        const statusText = status === 'success' ? 'Succes' : status === 'error' ? 'Erreur' : 'Arrete';
+        const icon = status === 'success' 
+            ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px"><polyline points="20 6 9 17 4 12"></polyline></svg>'
+            : status === 'error'
+            ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>'
+            : '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>';
 
         return `
             <div class="part part-step">
                 ${this.renderTimestamp(part.time)}
-                ${icon} <strong>Fin d'étape</strong>
-                ${part.error ? `<div>Erreur: ${this.escapeHtml(part.error)}</div>` : ''}
+                ${icon} <strong>Fin d'etape</strong>
+                ${part.reason ? `<span class="step-reason">(${this.escapeHtml(part.reason)})</span>` : ''}
+                ${part.error ? `<div class="step-error">Erreur: ${this.escapeHtml(part.error)}</div>` : ''}
             </div>
         `;
     }
@@ -431,11 +484,11 @@ export class TimelineRenderer {
 
         if (!start) return '';
 
-        let html = `<span class="part-timestamp">🕐 ${this.formatTime(start.getTime())}`;
+        let html = `<span class="part-timestamp"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg> ${this.formatTime(start.getTime())}`;
 
         if (end && start) {
             const duration = end.getTime() - start.getTime();
-            html += ` → ${this.formatTime(end.getTime())} (${this.formatDuration(duration)})`;
+            html += ` <span class="duration-badge">${this.formatDuration(duration)}</span>`;
         }
 
         html += '</span>';

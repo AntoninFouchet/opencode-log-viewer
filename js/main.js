@@ -16,6 +16,7 @@ const timeline = new TimelineRenderer(document.getElementById("timeline"));
 
 // État
 let currentSessionId = null;
+let currentMessages = [];
 let unsubscribe = null;
 let refreshTimer = null;
 let allSessions = [];
@@ -94,7 +95,6 @@ function renderSessionsList(sessions) {
             <div class="session-item ${isActive ? "active" : ""}" data-id="${session.id}">
                 <div class="session-title" contenteditable="false" data-session-id="${session.id}">${escapeHtml(session.title || "Sans titre")}</div>
                 <div class="session-meta">
-                    <span class="status status-${session.status || "unknown"}">${session.status || "unknown"}</span>
                     <span class="date">${formatDate(session.time?.created)}</span>
                 </div>
             </div>
@@ -212,11 +212,12 @@ async function loadSession(sessionId) {
 }
 
 function displaySession(session, messages) {
+  // Store messages globally for diff extraction
+  currentMessages = messages;
+  
   // Header
   document.getElementById("session-title").textContent =
     session.title || "Sans titre";
-  document.getElementById("session-status").textContent = "idle";
-  document.getElementById("session-status").className = "status status-idle";
   document.getElementById("session-date").textContent = formatDateTime(
     session.time?.created,
   );
@@ -450,6 +451,22 @@ function setupEventListeners() {
     window.location.reload();
   });
 
+  // Toggle left sidebar (sessions) - only from header button
+  const toggleLeftHeaderBtn = document.getElementById("toggle-left-header-btn");
+  if (toggleLeftHeaderBtn) {
+    toggleLeftHeaderBtn.addEventListener("click", () => {
+      document.querySelector(".app").classList.toggle("sidebar-collapsed");
+    });
+  }
+
+  // Toggle right panel (details)
+  const toggleRightBtn = document.getElementById("toggle-right-btn");
+  if (toggleRightBtn) {
+    toggleRightBtn.addEventListener("click", () => {
+      document.querySelector(".app").classList.toggle("details-collapsed");
+    });
+  }
+
   // Event delegation for patch file links in timeline
   document.getElementById("timeline").addEventListener("click", (e) => {
     // Handle diff toggle button
@@ -655,11 +672,19 @@ function extractDiffsFromMessages(messages) {
 
 function renderModificationsList(modsContent) {
   if (currentPatches.length === 0) {
-    modsContent.innerHTML = '<div class="empty-stats">Aucune modification détectée</div>';
+    modsContent.innerHTML = '<div class="empty-stats">Aucune modification detectee</div>';
     return;
   }
 
-  modsContent.innerHTML = currentPatches
+  // Count unique files
+  const uniqueFiles = new Set(currentPatches.map(p => p.file));
+  
+  modsContent.innerHTML = `
+    <div class="mods-header">
+      <strong>${uniqueFiles.size} fichier(s) modifie(s)</strong>
+    </div>
+    <div class="mods-list">
+    ${currentPatches
     .map(
       (patch, index) => {
         const fileName = patch.file.split('/').pop();
@@ -673,9 +698,11 @@ function renderModificationsList(modsContent) {
           </div>
           <div class="mod-path">${escapeHtml(patch.file)}</div>
         </div>
-      `}
+      `
+      }
     )
-    .join("");
+    .join("")}
+    </div>`;
 
   modsContent.querySelectorAll(".mod-item").forEach((item) => {
     item.addEventListener("click", (e) => {
@@ -711,25 +738,73 @@ function scrollToMessage(msgIndex, patch) {
 
 function toggleDiffInTimeline(msgIndex, partIndex, toggleBtn) {
   const timeline = document.getElementById('timeline');
-  const messages = timeline.querySelectorAll('.message');
-  const messageEl = messages[msgIndex];
+  const messagesEl = timeline.querySelectorAll('.message');
+  const messageEl = messagesEl[msgIndex];
   
   if (!messageEl) return;
   
   // Check if diff already displayed in this message
   const existingDiff = messageEl.querySelector('.timeline-diff-inline');
   if (existingDiff) {
-    // Toggle visibility
     existingDiff.classList.toggle('hidden');
     toggleBtn.classList.toggle('expanded');
     return;
   }
   
-  // Find the patch that corresponds to this message
-  const patch = currentPatches.find(p => p.msgIndex === msgIndex);
-  if (!patch) return;
+  // Get the original message data - we need to find the correct message
+  const domMsgId = messageEl.dataset.messageId;
+  let msgData = currentMessages.find(m => (m.info?.id || m.id) === domMsgId);
+  
+  if (!msgData) return;
+  
+  // Parts can be in msgData.parts or msgData.info.parts
+  const parts = msgData.parts || (msgData.info || {}).parts || [];
+  
+  // Find all tool parts with oldString/newString
+  const editToolParts = [];
+  parts.forEach((part, idx) => {
+    if (part.type === 'tool') {
+      const state = part.state || {};
+      const input = state.input || {};
+      if (input.oldString !== undefined || input.newString !== undefined) {
+        editToolParts.push({ part, index: idx });
+      }
+    }
+  });
+  
+  if (editToolParts.length === 0) return;
+  
+  // Use the edit tool part at the specified index, or the first one
+  const toolData = editToolParts[partIndex] || editToolParts[0];
+  const toolPart = toolData.part;
+  
+  const state = toolPart.state || {};
+  const input = state.input || {};
+  
+  const oldString = input.oldString;
+  const newString = input.newString;
+  
+  if (oldString === undefined && newString === undefined) return;
+  
+  const filePath = input.filePath || 'unknown';
+  const oldStr = oldString || '';
+  const newStr = newString || '';
+  
+  const additions = newStr.split('\n').length - oldStr.split('\n').length;
+  const deletions = additions < 0 ? -additions : 0;
+  const posAdditions = additions > 0 ? additions : 0;
+  
+  const patch = {
+    msgIndex: msgIndex,
+    file: filePath,
+    before: oldStr,
+    after: newStr,
+    additions: posAdditions,
+    deletions: deletions,
+  };
   
   addDiffToMessage(messageEl, patch, partIndex, toggleBtn);
+  messageEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 function addDiffToMessage(messageEl, patch, partIndex = -1, toggleBtn = null) {
@@ -749,7 +824,16 @@ function addDiffToMessage(messageEl, patch, partIndex = -1, toggleBtn = null) {
   
   // Find the tool part and append diff after it
   const toolParts = messageEl.querySelectorAll('.part-tool');
-  const toolPart = partIndex >= 0 ? toolParts[partIndex] : toolParts[toolParts.length - 1];
+  
+  // Use the correct tool part - clamp partIndex to valid range
+  let toolPart = null;
+  if (toolParts.length > 0) {
+    if (partIndex >= 0 && partIndex < toolParts.length) {
+      toolPart = toolParts[partIndex];
+    } else {
+      toolPart = toolParts[toolParts.length - 1];
+    }
+  }
   
   if (toolPart) {
     toolPart.after(diffContainer);
@@ -851,12 +935,12 @@ function saveSettings() {
 
   // Validation
   if (!newURL) {
-    alert("⚠️ L'URL du serveur ne peut pas être vide");
+    alert("Attention: L'URL du serveur ne peut pas être vide");
     return;
   }
 
   if (newInterval < 5000 || newInterval > 300000) {
-    alert("⚠️ L'intervalle doit être entre 5 et 300 secondes");
+    alert("Attention: L'intervalle doit être entre 5 et 300 secondes");
     return;
   }
 
