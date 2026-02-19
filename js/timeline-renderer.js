@@ -8,6 +8,7 @@ export class TimelineRenderer {
     constructor(container) {
         this.container = container;
         this.renderedMessageIds = new Set();
+        this.patchIndexCounter = 0;
     }
 
     /**
@@ -32,6 +33,7 @@ export class TimelineRenderer {
 
         this.container.innerHTML = '';
         this.renderedMessageIds.clear();
+        this.patchIndexCounter = 0;
         
         messages.forEach((msg, index) => {
             const id = msg.info?.id || msg.id || `msg-${index}`;
@@ -242,13 +244,25 @@ export class TimelineRenderer {
         // Résultat depuis state.output
         const result = part.state?.output;
         const state = part.state || {};
+        const hasResult = result !== undefined && result !== null && result !== '';
 
         // Check if this is an edit tool with oldString/newString
         const isEditTool = name === 'edit' || name === 'write';
         const hasDiff = isEditTool && (args.oldString !== undefined || args.newString !== undefined);
+        const currentPatchIndex = hasDiff ? this.patchIndexCounter++ : -1;
         const diffToggle = hasDiff ? `
-            <button class="diff-toggle-btn" data-msg-index="${messageIndex}" data-part-index="${partIndex}" title="Afficher/Masquer les modifications">
+            <button class="diff-toggle-btn" data-msg-index="${messageIndex}" data-part-index="${partIndex}" data-patch-index="${currentPatchIndex}" title="Afficher/Masquer les modifications">
                 <span class="diff-toggle-icon">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="9 18 15 12 9 6"></polyline>
+                    </svg>
+                </span>
+            </button>
+        ` : '';
+
+        const resultToggle = hasResult ? `
+            <button class="result-toggle-btn" data-msg-index="${messageIndex}" data-part-index="${partIndex}" title="Afficher/Masquer le résultat">
+                <span class="result-toggle-icon">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <polyline points="9 18 15 12 9 6"></polyline>
                     </svg>
@@ -260,6 +274,7 @@ export class TimelineRenderer {
             <div class="part part-tool" data-msg-index="${messageIndex}" data-part-index="${partIndex}">
                 ${this.renderTimestamp(part.time)}
                 <div class="tool-header">
+                    ${resultToggle}
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px">
                         <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>
                     </svg>
@@ -273,7 +288,7 @@ export class TimelineRenderer {
                     <pre><code class="language-json">${this.escapeHtml(JSON.stringify(args, null, 2))}</code></pre>
                 </div>
                 ` : ''}
-                ${result ? `
+                ${hasResult ? `
                     <div class="tool-result">
                         <strong>Résultat:</strong>
                         <pre><code>${this.escapeHtml(this.formatToolResult(result))}</code></pre>
