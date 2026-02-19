@@ -12,7 +12,46 @@ OpenCode runs on port 3000 (via Podman). If you try to start OpenCode again whil
 
 To restart OpenCode:
 1. Stop the current container
-2. Start it again with `podman-compose up -d` (or your equivalent command)
+2. Start it again with `podman-compose up -d` (or run.sh)
+
+## Configuring OpenCode for OpenCode Log Viewer
+
+For the OpenCode Log Viewer interface to connect to OpenCode, you need to configure the OpenCode server to listen on the network.
+
+### 1. Modify the `package.json` file at the root of OpenCode
+
+Find the line:
+```json
+"dev": "bun run --cwd packages/opencode --conditions=browser src/index.ts",
+```
+
+Replace it with:
+```json
+"dev": "bun run --cwd packages/opencode --conditions=browser src/index.ts --port 3000 --hostname 0.0.0.0",
+```
+
+### 2. If using Docker/Podman
+
+Add the port mapping in your `docker-compose.yml` or `docker-compose.yaml` file:
+
+```yaml
+ports:
+  - "3000:3000"
+```
+
+### 3. Launch OpenCode Log Viewer
+
+Simply run:
+```bash
+start-viewer-and-open.bat
+```
+
+### 4. Verify the connection
+
+In the interface, the connection status should display "Connecté à http://localhost:3000". If not:
+- Make sure OpenCode is running
+- Check that port 3000 is accessible
+- Check the settings by clicking the ⚙️ icon in the interface
 
 ## Base URL
 
@@ -273,41 +312,6 @@ Parts can include timing information:
 | `time.end` | number | Unix timestamp when part ended |
 | `time.created` | number | Unix timestamp of creation |
 
-## Available Tools
-
-Based on the API data, the following tools are available:
-
-| Tool | Description |
-|------|-------------|
-| `edit` | Edit a file (uses oldString/newString) |
-| `write` | Write content to a file |
-| `bash` | Execute shell commands |
-| `read` | Read file content |
-| `glob` | Find files by pattern |
-| `grep` | Search in files |
-| `websearch` | Search the web |
-| `codesearch` | Search code online |
-| `read_pdf` | Read PDF files |
-
-## Real-time Events
-
-OpenCode emits events that can be subscribed to:
-
-### Event Types
-
-- `session.updated` - Session was modified
-- `message.created` - New message in a session
-
-### Subscribing to Events
-
-```javascript
-const ws = new WebSocket('ws://localhost:3000/events');
-
-ws.onmessage = (event) => {
-  const data = JSON.parse(event.data);
-  console.log('Event:', data);
-};
-```
 
 ## Extracting Diffs
 
@@ -326,15 +330,6 @@ if (input.oldString !== undefined || input.newString !== undefined) {
   };
 }
 ```
-
-## Limitations
-
-The following information is NOT available through the API:
-
-- **Vector search / RAG** - No information about embeddings or vector database queries
-- **Internal algorithms** - Decision-making processes are not exposed
-- **Warnings** - No warning logs are stored
-- **Detailed tool metadata** - Only basic tool execution info is available
 
 ## Authentication
 
